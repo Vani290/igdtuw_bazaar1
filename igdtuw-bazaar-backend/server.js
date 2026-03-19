@@ -1,5 +1,3 @@
-// igdtuw-bazaar-backend/server.js
-
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -7,24 +5,34 @@ import cors from 'cors';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// ==============================
+// ✅ CORS FIX (important for deployment)
+// ==============================
 app.use(cors({
-  origin: 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type'],
+  origin: '*',   // allow all for now (later we can restrict)
 }));
 app.use(express.json());
 
-// MongoDB Connection
-const uri = 'mongodb+srv://new123:bazaar123@cluster0.nob7p22.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+// ==============================
+// ✅ MongoDB Connection (ENV)
+// ==============================
+const uri = process.env.MONGO_URI;
+
+if (!uri) {
+  console.error("❌ MONGO_URI is not defined in environment variables");
+  process.exit(1);
+}
 
 mongoose.connect(uri)
   .then(() => console.log('✅ MongoDB connection successful'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
 
-// ============================================
+// ==============================
 // SCHEMAS & MODELS
-// ============================================
+// ==============================
 
 const userSchema = new mongoose.Schema({
   name:      { type: String, required: true },
@@ -58,24 +66,26 @@ const User       = mongoose.model('User', userSchema);
 const Product    = mongoose.model('Product', productSchema);
 const SharedItem = mongoose.model('SharedItem', sharedItemSchema);
 
-// ============================================
-// PRODUCT ROUTES
-// ============================================
+// ==============================
+// TEST ROUTE (VERY IMPORTANT)
+// ==============================
+app.get('/', (req, res) => {
+  res.send('🚀 IGDTUW Bazaar Backend is Live!');
+});
 
-// GET all products
+// ==============================
+// PRODUCT ROUTES
+// ==============================
+
 app.get('/api/products', async (req, res) => {
   try {
-    console.log('📡 Fetching all products');
     const products = await Product.find({}).sort({ createdAt: -1 });
-    console.log(`✅ Found ${products.length} products`);
     res.json(products);
   } catch (error) {
-    console.error('❌ Error fetching products:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// GET single product by ID
 app.get('/api/products/:id', async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -84,26 +94,20 @@ app.get('/api/products/:id', async (req, res) => {
     }
     res.json(product);
   } catch (error) {
-    console.error('❌ Error fetching product:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// POST new product
 app.post('/api/products', async (req, res) => {
   try {
-    console.log('📝 Creating new product:', req.body);
     const newProduct = new Product(req.body);
     const savedProduct = await newProduct.save();
-    console.log('✅ Product saved:', savedProduct.productName);
     res.status(201).json(savedProduct);
   } catch (error) {
-    console.error('❌ Error creating product:', error);
     res.status(400).json({ message: error.message });
   }
 });
 
-// DELETE product
 app.delete('/api/products/:id', async (req, res) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id);
@@ -116,11 +120,10 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-// ============================================
+// ==============================
 // AUTH ROUTES
-// ============================================
+// ==============================
 
-// Signup
 app.post('/api/auth/signup', async (req, res) => {
   const { name, email, password } = req.body;
   try {
@@ -130,82 +133,64 @@ app.post('/api/auth/signup', async (req, res) => {
     }
     const newUser = new User({ name, email, password });
     await newUser.save();
-    console.log('✅ New user created:', email);
-    res.status(201).json({ message: 'User created successfully', userId: newUser._id });
+    res.status(201).json({ message: 'User created', userId: newUser._id });
   } catch (error) {
-    console.error('❌ Signup error:', error);
-    res.status(500).json({ message: 'Server error during signup.' });
+    res.status(500).json({ message: 'Signup error' });
   }
 });
 
-// Login
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials: User not found.' });
+    if (!user || user.password !== password) {
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
-    if (user.password !== password) {
-      return res.status(400).json({ message: 'Invalid credentials: Incorrect password.' });
-    }
-    console.log('✅ User logged in:', email);
-    res.json({ message: 'Login successful!', userId: user._id, userName: user.name });
+    res.json({ message: 'Login successful', userId: user._id, userName: user.name });
   } catch (error) {
-    console.error('❌ Login error:', error);
-    res.status(500).json({ message: 'Server error during login.' });
+    res.status(500).json({ message: 'Login error' });
   }
 });
 
-// ============================================
+// ==============================
 // SHARED ITEMS ROUTES
-// ============================================
+// ==============================
 
-// GET all shared items
 app.get('/api/shared-items', async (req, res) => {
   try {
-    console.log('📡 Fetching all shared items');
     const items = await SharedItem.find({}).sort({ createdAt: -1 });
-    console.log(`✅ Found ${items.length} shared items`);
     res.json(items);
   } catch (error) {
-    console.error('❌ Error fetching shared items:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// POST new shared item
 app.post('/api/shared-items', async (req, res) => {
   try {
-    console.log('📝 Creating new shared item:', req.body);
     const newItem = new SharedItem(req.body);
     const savedItem = await newItem.save();
-    console.log('✅ Shared item saved:', savedItem.itemName);
     res.status(201).json(savedItem);
   } catch (error) {
-    console.error('❌ Error creating shared item:', error);
     res.status(400).json({ message: error.message });
   }
 });
 
-// DELETE shared item
 app.delete('/api/shared-items/:id', async (req, res) => {
   try {
     const deleted = await SharedItem.findByIdAndDelete(req.params.id);
     if (!deleted) {
-      return res.status(404).json({ message: 'Shared item not found' });
+      return res.status(404).json({ message: 'Item not found' });
     }
-    res.json({ message: 'Shared item deleted successfully' });
+    res.json({ message: 'Deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// ============================================
+// ==============================
 // START SERVER
-// ============================================
+// ==============================
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
-  console.log(`📡 CORS enabled for: http://localhost:5173`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
